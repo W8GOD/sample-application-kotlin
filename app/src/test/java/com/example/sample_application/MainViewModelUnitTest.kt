@@ -1,14 +1,23 @@
 package com.example.sample_application
 
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
+import androidx.lifecycle.Observer
 import com.example.sample_application.api.TweetRepository
+import com.example.sample_application.api.entry.TweetBean
 import com.example.sample_application.viewmodels.MainViewModel
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
-import kotlinx.coroutines.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.test.TestCoroutineDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
-import org.junit.*
+import org.junit.After
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
 import org.junit.rules.TestRule
 import java.util.concurrent.Executors
 
@@ -35,18 +44,33 @@ class MainViewModelUnitTest {
 
     @Test
     fun test_fetch_tweets() {
-        //Given
+        // Given
         val tweetRepository = mockk<TweetRepository>()
+        val testDispatcher = TestCoroutineDispatcher()
+
         coEvery {
             tweetRepository.fetchTweets()
-        } returns listOf()
+        } returns listOf(TweetBean("Test Tweet"))
+
+        Dispatchers.setMain(testDispatcher)
 
         val mainViewModel = MainViewModel(tweetRepository)
+        val observer = mockk<Observer<List<TweetBean>?>>(relaxed = true)
+        mainViewModel.tweets.observeForever(observer)
 
-        //When
+        // When
         mainViewModel.refreshTweets()
+        testDispatcher.advanceUntilIdle()
 
-        //Then
-        Assert.assertEquals(0, mainViewModel.tweets.value?.size)
+        // Then
+        val expectedTweets = listOf(TweetBean("Test Tweet"))
+        coVerify {
+            observer.onChanged(expectedTweets)
+        }
+        coVerify(exactly = 1) {
+            tweetRepository.fetchTweets()
+        }
+        Dispatchers.resetMain()
+        testDispatcher.cleanupTestCoroutines()
     }
 }
